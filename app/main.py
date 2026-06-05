@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 
 from app.ai_service import generate_ai_report
 from app.analysis import build_analysis_summary
@@ -27,7 +27,21 @@ def health() -> HealthResponse:
 
 
 @app.post("/analyze-sales", response_model=AnalyzeSalesResponse)
-async def analyze_sales(file: UploadFile = File(...)) -> AnalyzeSalesResponse:
+async def analyze_sales(
+    file: UploadFile = File(...),
+    ai_provider: str = Form(
+        default="auto",
+        description="AI provider: auto, deepseek, openai, or local.",
+    ),
+    ai_model: str | None = Form(
+        default=None,
+        description="Optional model override, such as deepseek-v4-flash or gpt-4o-mini.",
+    ),
+    ai_base_url: str | None = Form(
+        default=None,
+        description="Optional OpenAI-compatible base URL override.",
+    ),
+) -> AnalyzeSalesResponse:
     global _latest_product_mapping
 
     if not file.filename:
@@ -41,7 +55,12 @@ async def analyze_sales(file: UploadFile = File(...)) -> AnalyzeSalesResponse:
 
         analysis_summary = build_analysis_summary(anonymised)
         ai_input_summary = _build_ai_safe_summary(analysis_summary)
-        ai_report = generate_ai_report(ai_input_summary)
+        ai_output = generate_ai_report(
+            ai_input_summary,
+            provider=ai_provider,
+            model=ai_model,
+            base_url=ai_base_url,
+        )
 
         return AnalyzeSalesResponse(
             anonymisation_status="completed",
@@ -53,7 +72,8 @@ async def analyze_sales(file: UploadFile = File(...)) -> AnalyzeSalesResponse:
             slow_moving_products=analysis_summary["slow_moving_products"],
             stocking_recommendations=analysis_summary["stocking_recommendations"],
             date_sales_relationship=analysis_summary["date_sales_relationship"],
-            ai_report=ai_report,
+            ai_output=ai_output,
+            ai_report=ai_output["report"],
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -86,4 +106,3 @@ def _build_ai_safe_summary(summary: dict) -> dict:
         "date_sales_relationship",
     }
     return {key: value for key, value in summary.items() if key in allowed_keys}
-

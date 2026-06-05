@@ -13,8 +13,8 @@ portfolio demo and is usable from FastAPI Swagger UI at `/docs`.
 - Anonymise product names before AI processing as `Product_001`, `Product_002`.
 - Calculate store performance, top products, fast/slow movers, stocking actions,
   and date-sales relationships.
-- Generate an OpenAI report when `OPENAI_API_KEY` exists, otherwise return a
-  local rule-based report for demos.
+- Generate an AI report with user-selectable providers: `auto`, `deepseek`,
+  `openai`, or `local`.
 - Expose a debug-only product mapping endpoint for local testing.
 
 ## Tech Stack
@@ -65,14 +65,23 @@ Open:
 http://127.0.0.1:8000/docs
 ```
 
-Set `.env` only if you want live OpenAI reports:
+Set `.env` only if you want live AI provider reports. DeepSeek is supported
+through its OpenAI-compatible API:
 
 ```text
-OPENAI_API_KEY=your_key_here
+DEEPSEEK_API_KEY=your_deepseek_key_here
+AI_BASE_URL=https://api.deepseek.com
+AI_MODEL=deepseek-v4-flash
+```
+
+OpenAI is also supported:
+
+```text
+OPENAI_API_KEY=your_openai_key_here
 OPENAI_MODEL=gpt-4o-mini
 ```
 
-Without an API key, the app returns a local fallback report.
+Without a valid API key, the app returns a local fallback report.
 
 ## Docker Run
 
@@ -101,6 +110,21 @@ http://127.0.0.1:8000/docs
 
 Upload a `.xlsx`, `.xls`, or `.csv` file using form field `file`.
 
+Optional form fields:
+
+| Field | Default | Description |
+| --- | --- | --- |
+| `ai_provider` | `auto` | Use `auto`, `deepseek`, `openai`, or `local` |
+| `ai_model` | Provider default | Optional model override |
+| `ai_base_url` | Provider default | Optional OpenAI-compatible base URL |
+
+Provider behavior:
+
+- `auto`: uses DeepSeek if `DEEPSEEK_API_KEY` exists, otherwise OpenAI.
+- `deepseek`: uses `DEEPSEEK_API_KEY`, `AI_BASE_URL`, and `AI_MODEL`.
+- `openai`: uses `OPENAI_API_KEY` and `OPENAI_MODEL`.
+- `local`: skips external AI and returns the rule-based fallback report.
+
 Example response shape:
 
 ```json
@@ -114,6 +138,14 @@ Example response shape:
   "slow_moving_products": [],
   "stocking_recommendations": [],
   "date_sales_relationship": {},
+  "ai_output": {
+    "provider": "deepseek",
+    "model": "deepseek-v4-flash",
+    "base_url": "https://api.deepseek.com",
+    "used_fallback": false,
+    "error": null,
+    "report": "# Retail Operations Report..."
+  },
   "ai_report": "## 1. Executive Summary..."
 }
 ```

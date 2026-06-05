@@ -5,21 +5,48 @@ from typing import Any
 
 from dotenv import load_dotenv
 
-from app.prompts import REPORT_SECTIONS, build_sales_report_prompt
+from app.prompts import build_sales_report_prompt
 
 
-def generate_ai_report(summary: dict[str, Any]) -> str:
+DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
+DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-flash"
+DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com"
+SUPPORTED_AI_PROVIDERS = {"auto", "openai", "deepseek", "local"}
+
+
+def generate_ai_report(
+    summary: dict[str, Any],
+    provider: str = "auto",
+    model: str | None = None,
+    base_url: str | None = None,
+) -> dict[str, Any]:
     load_dotenv()
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        return generate_fallback_report(summary, "OPENAI_API_KEY is not configured.")
+    config = _load_ai_config(provider=provider, model=model, base_url=base_url)
+    if config["provider"] == "local":
+        report = generate_fallback_report(summary, "Local rule-based report selected.")
+        return _build_ai_output(config, report, used_fallback=True, error=None)
+
+    if not config["api_key"]:
+        report = generate_fallback_report(
+            summary, "No AI API key is configured. Set DEEPSEEK_API_KEY or OPENAI_API_KEY."
+        )
+        return _build_ai_output(
+            config,
+            report,
+            used_fallback=True,
+            error="No AI API key is configured.",
+        )
 
     try:
         from openai import OpenAI
 
-        client = OpenAI(api_key=api_key)
+        client_kwargs = {"api_key": config["api_key"]}
+        if config["base_url"]:
+            client_kwargs["base_url"] = config["base_url"]
+
+        client = OpenAI(**client_kwargs)
         response = client.chat.completions.create(
-            model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+            model=config["model"],
             messages=[
                 {
                     "role": "system",
@@ -30,9 +57,73 @@ def generate_ai_report(summary: dict[str, Any]) -> str:
             temperature=0.2,
         )
         content = response.choices[0].message.content
-        return content or generate_fallback_report(summary, "OpenAI returned no text.")
+        if not content:
+            report = generate_fallback_report(summary, "AI provider returned no text.")
+            return _build_ai_output(
+                config,
+                report,
+                used_fallback=True,
+                error="AI provider returned no text.",
+            )
+        return _build_ai_output(config, content, used_fallback=False, error=None)
     except Exception as exc:  # pragma: no cover - depends on external API
-        return generate_fallback_report(summary, f"OpenAI API call failed: {exc}")
+        report = generate_fallback_report(summary, f"AI provider API call failed: {exc}")
+        return _build_ai_output(config, report, used_fallback=True, error=str(exc))
+
+
+def _load_ai_config(
+    provider: str = "auto",
+    model: str | None = None,
+    base_url: str | None = None,
+) -> dict[str, str | None]:
+    provider = provider.strip().lower() or "auto"
+    model = model.strip() if model else None
+    base_url = base_url.strip() if base_url else None
+    if provider not in SUPPORTED_AI_PROVIDERS:
+        supported = ", ".join(sorted(SUPPORTED_AI_PROVIDERS))
+        raise ValueError(f"Unsupported ai_provider '{provider}'. Use one of: {supported}.")
+
+    deepseek_key = os.getenv("DEEPSEEK_API_KEY")
+    openai_key = os.getenv("OPENAI_API_KEY")
+
+    if provider == "local":
+        return {
+            "provider": "local",
+            "api_key": None,
+            "base_url": None,
+            "model": "local-rule-based",
+        }
+
+    if provider == "deepseek" or (provider == "auto" and deepseek_key):
+        return {
+            "provider": "deepseek",
+            "api_key": deepseek_key,
+            "base_url": base_url or os.getenv("AI_BASE_URL", DEFAULT_DEEPSEEK_BASE_URL),
+            "model": model or os.getenv("AI_MODEL", DEFAULT_DEEPSEEK_MODEL),
+        }
+
+    return {
+        "provider": "openai",
+        "api_key": openai_key,
+        "base_url": base_url or os.getenv("OPENAI_BASE_URL"),
+        "model": model or os.getenv("OPENAI_MODEL", DEFAULT_OPENAI_MODEL),
+    }
+
+
+def _build_ai_output(
+    config: dict[str, str | None],
+    report: str,
+    used_fallback: bool,
+    error: str | None,
+) -> dict[str, Any]:
+    return {
+        "provider": config["provider"],
+        "model": config["model"],
+        "base_url": config["base_url"],
+        "used_fallback": used_fallback,
+        "error": error,
+        "report": report,
+    }
 
 
 def generate_fallback_report(summary: dict[str, Any], reason: str | None = None) -> str:
@@ -108,4 +199,3 @@ def _recommendations_sentence(recommendations: list[dict[str, Any]]) -> str:
     return "Priority actions: " + "; ".join(
         f"{item['product_code']} - {item['recommendation']}" for item in priority
     )
-

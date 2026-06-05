@@ -16,6 +16,15 @@ class StockingRecommendation(BaseModel):
     reason: str
 
 
+class AIOutput(BaseModel):
+    provider: str
+    model: str
+    base_url: str | None = None
+    used_fallback: bool
+    error: str | None = None
+    report: str
+
+
 class AnalyzeSalesResponse(BaseModel):
     anonymisation_status: str = Field(default="completed")
     row_count: int
@@ -26,10 +35,10 @@ class AnalyzeSalesResponse(BaseModel):
     slow_moving_products: list[dict[str, Any]]
     stocking_recommendations: list[StockingRecommendation]
     date_sales_relationship: dict[str, Any]
+    ai_output: AIOutput
     ai_report: str
 
 
 class ProductMappingResponse(BaseModel):
     warning: str
     mapping: dict[str, str]
-
