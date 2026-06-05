@@ -8,6 +8,7 @@ def test_map_columns_handles_actual_pos_headers():
     df = pd.DataFrame(
         columns=[
             "营业日",
+            "区域分组",
             "门店名称",
             "商品名称",
             "商品销售数量(销售)",
@@ -17,9 +18,14 @@ def test_map_columns_handles_actual_pos_headers():
 
     mapped = map_columns(df)
 
-    assert {"date", "store_name", "product_name", "quantity_sold", "sales_amount"} <= set(
-        mapped.columns
-    )
+    assert {
+        "region",
+        "date",
+        "store_name",
+        "product_name",
+        "quantity_sold",
+        "sales_amount",
+    } <= set(mapped.columns)
 
 
 def test_map_columns_reports_missing_required_columns():
@@ -29,4 +35,3 @@ def test_map_columns_reports_missing_required_columns():
         map_columns(df)
 
     assert "Missing required columns" in str(exc.value)
-

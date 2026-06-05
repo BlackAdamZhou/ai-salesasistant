@@ -22,6 +22,9 @@ def prepare_sales_dataframe(df: pd.DataFrame) -> pd.DataFrame:
         working["stock_remaining"] = pd.to_numeric(
             working["stock_remaining"], errors="coerce"
         )
+    if "region" not in working.columns:
+        working["region"] = "N/A"
+    working["region"] = working["region"].fillna("N/A").astype(str).str.strip()
     working = working.dropna(subset=required)
     if working.empty:
         raise ValueError("No valid rows available for analysis.")
@@ -53,6 +56,11 @@ def build_analysis_summary(df: pd.DataFrame) -> dict[str, Any]:
         "row_count": int(len(working)),
         "product_count": int(working["product_code"].nunique()),
         "store_count": int(working["store_name"].nunique()),
+        "date_range": {
+            "start_date": _format_date(working["date"].min()),
+            "end_date": _format_date(working["date"].max()),
+            "sales_days": int(working["date"].nunique()),
+        },
         "store_performance": store_performance,
         "top_products": top_products,
         "fast_moving_products": fast_moving_products,
@@ -63,6 +71,13 @@ def build_analysis_summary(df: pd.DataFrame) -> dict[str, Any]:
 
 
 def calculate_store_performance(df: pd.DataFrame) -> list[dict[str, Any]]:
+    store_region = (
+        df.groupby(["store_name", "region"])
+        .size()
+        .reset_index(name="row_count")
+        .sort_values(["store_name", "row_count"], ascending=[True, False])
+        .drop_duplicates("store_name")[["store_name", "region"]]
+    )
     grouped = (
         df.groupby("store_name")
         .agg(
@@ -84,7 +99,9 @@ def calculate_store_performance(df: pd.DataFrame) -> list[dict[str, Any]]:
     best_days = daily_by_store.loc[idx].rename(
         columns={"date": "best_sales_date", "sales_amount": "best_day_sales"}
     )
-    result = grouped.merge(best_days, on="store_name", how="left")
+    result = grouped.merge(store_region, on="store_name", how="left").merge(
+        best_days, on="store_name", how="left"
+    )
     result = result.sort_values("total_sales_amount", ascending=False)
     return _records(result)
 
@@ -95,6 +112,7 @@ def calculate_product_performance(df: pd.DataFrame) -> list[dict[str, Any]]:
         "total_sales_amount": ("sales_amount", "sum"),
         "sales_frequency": ("sales_amount", "count"),
         "sales_days": ("date", "nunique"),
+        "covered_store_count": ("store_name", "nunique"),
         "average_sales_amount": ("sales_amount", "mean"),
     }
     if "stock_remaining" in df.columns:
@@ -105,6 +123,11 @@ def calculate_product_performance(df: pd.DataFrame) -> list[dict[str, Any]]:
         grouped["total_quantity_sold"] / grouped["sales_days"].replace(0, pd.NA)
     )
     grouped["sales_velocity"] = grouped["average_daily_quantity"]
+    grouped["single_store_daily_quantity"] = (
+        grouped["total_quantity_sold"]
+        / grouped["covered_store_count"].replace(0, pd.NA)
+        / grouped["sales_days"].replace(0, pd.NA)
+    )
     grouped = grouped.sort_values("total_sales_amount", ascending=False)
     return _records(grouped)
 
@@ -162,12 +185,16 @@ def generate_stocking_recommendations(
 
 
 def calculate_date_sales_relationship(df: pd.DataFrame) -> dict[str, Any]:
+    aggregations: dict[str, tuple[str, str]] = {
+        "sales_amount": ("sales_amount", "sum"),
+        "quantity_sold": ("quantity_sold", "sum"),
+        "transaction_count": ("sales_amount", "count"),
+        "active_store_count": ("store_name", "nunique"),
+        "active_product_count": ("product_code", "nunique"),
+    }
     daily = (
         df.groupby("date", as_index=False)
-        .agg(
-            sales_amount=("sales_amount", "sum"),
-            quantity_sold=("quantity_sold", "sum"),
-        )
+        .agg(**aggregations)
         .sort_values("date")
     )
 
@@ -186,13 +213,7 @@ def calculate_date_sales_relationship(df: pd.DataFrame) -> dict[str, Any]:
         trend = "stable"
 
     day_index = range(len(daily))
-    correlation = (
-        float(pd.Series(day_index).corr(daily["sales_amount"]))
-        if len(daily) > 1
-        else 0.0
-    )
-    if math.isnan(correlation):
-        correlation = 0.0
+    correlation = _safe_corr(day_index, daily["sales_amount"])
 
     daily["day_type"] = daily["date"].dt.dayofweek.apply(
         lambda day: "weekend" if day >= 5 else "weekday"
@@ -206,12 +227,33 @@ def calculate_date_sales_relationship(df: pd.DataFrame) -> dict[str, Any]:
         )
         .sort_values("day_type")
     )
+    weekend_avg = _lookup_day_type_average(weekend_vs_weekday, "weekend")
+    weekday_avg = _lookup_day_type_average(weekend_vs_weekday, "weekday")
+    weekend_lift = (
+        ((weekend_avg - weekday_avg) / weekday_avg) * 100
+        if weekday_avg and weekend_avg is not None
+        else None
+    )
+
+    correlation_metrics = {
+        "sales_amount": _safe_corr(day_index, daily["sales_amount"]),
+        "quantity_sold": _safe_corr(day_index, daily["quantity_sold"]),
+        "transaction_count": _safe_corr(day_index, daily["transaction_count"]),
+        "active_store_count": _safe_corr(day_index, daily["active_store_count"]),
+        "active_product_count": _safe_corr(day_index, daily["active_product_count"]),
+    }
 
     return {
         "peak_date": _format_date(peak_row["date"]),
         "peak_date_sales_amount": _round_number(peak_row["sales_amount"]),
         "trend": trend,
-        "date_sales_correlation": round(correlation, 4),
+        "date_sales_correlation": correlation,
+        "correlation_metrics": correlation_metrics,
+        "top_sales_dates": _records(daily.nlargest(3, "sales_amount")),
+        "lowest_sales_dates": _records(daily.nsmallest(3, "sales_amount")),
+        "weekend_sales_lift_percent": (
+            _round_number(weekend_lift) if weekend_lift is not None else None
+        ),
         "weekend_vs_weekday": _records(weekend_vs_weekday),
         "daily_sales": _records(daily.drop(columns=["day_type"])),
     }
@@ -240,3 +282,19 @@ def _format_date(value: Any) -> str:
 
 def _round_number(value: Any) -> float:
     return round(float(value), 4)
+
+
+def _safe_corr(day_index: range, values: pd.Series) -> float:
+    if len(values) <= 1 or values.nunique(dropna=True) <= 1:
+        return 0.0
+    correlation = float(pd.Series(day_index).corr(values))
+    if math.isnan(correlation):
+        return 0.0
+    return round(correlation, 4)
+
+
+def _lookup_day_type_average(df: pd.DataFrame, day_type: str) -> float | None:
+    row = df.loc[df["day_type"] == day_type]
+    if row.empty:
+        return None
+    return float(row.iloc[0]["average_sales_amount"])

@@ -41,6 +41,10 @@ async def analyze_sales(
         default=None,
         description="Optional OpenAI-compatible base URL override.",
     ),
+    output_language: str = Form(
+        default="en",
+        description="Report language: en / english / 英文, or zh / chinese / 中文.",
+    ),
 ) -> AnalyzeSalesResponse:
     global _latest_product_mapping
 
@@ -60,6 +64,7 @@ async def analyze_sales(
             provider=ai_provider,
             model=ai_model,
             base_url=ai_base_url,
+            output_language=output_language,
         )
 
         return AnalyzeSalesResponse(
@@ -94,15 +99,36 @@ def product_mapping() -> ProductMappingResponse:
 
 
 def _build_ai_safe_summary(summary: dict) -> dict:
-    allowed_keys = {
-        "row_count",
-        "product_count",
-        "store_count",
-        "store_performance",
-        "top_products",
-        "fast_moving_products",
-        "slow_moving_products",
-        "stocking_recommendations",
-        "date_sales_relationship",
+    date_metrics = summary.get("date_sales_relationship", {})
+    return {
+        "row_count": summary.get("row_count"),
+        "product_count": summary.get("product_count"),
+        "store_count": summary.get("store_count"),
+        "date_range": summary.get("date_range"),
+        "store_performance_top_10_by_sales_amount": summary.get(
+            "store_performance", []
+        )[:10],
+        "products_top_10_by_sales_amount": sorted(
+            summary.get("top_products", []),
+            key=lambda item: item.get("total_sales_amount", 0),
+            reverse=True,
+        )[:10],
+        "fast_moving_products_top_10": summary.get("fast_moving_products", [])[:10],
+        "slow_moving_products_bottom_10": summary.get("slow_moving_products", [])[:10],
+        "stocking_recommendations_sample": summary.get(
+            "stocking_recommendations", []
+        )[:20],
+        "date_sales_relationship": {
+            "peak_date": date_metrics.get("peak_date"),
+            "peak_date_sales_amount": date_metrics.get("peak_date_sales_amount"),
+            "trend": date_metrics.get("trend"),
+            "date_sales_correlation": date_metrics.get("date_sales_correlation"),
+            "correlation_metrics": date_metrics.get("correlation_metrics"),
+            "weekend_sales_lift_percent": date_metrics.get(
+                "weekend_sales_lift_percent"
+            ),
+            "weekend_vs_weekday": date_metrics.get("weekend_vs_weekday"),
+            "top_sales_dates": date_metrics.get("top_sales_dates"),
+            "lowest_sales_dates": date_metrics.get("lowest_sales_dates"),
+        },
     }
-    return {key: value for key, value in summary.items() if key in allowed_keys}

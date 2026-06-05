@@ -74,6 +74,17 @@ AI_BASE_URL=https://api.deepseek.com
 AI_MODEL=deepseek-v4-flash
 ```
 
+Optional AI limits can be added only when needed:
+
+```text
+AI_TIMEOUT_SECONDS=180
+AI_MAX_RETRIES=2
+AI_MAX_TOKENS=3000
+```
+
+If these variables are not set, the app does not add its own timeout or token
+limit and uses the provider/SDK defaults.
+
 OpenAI is also supported:
 
 ```text
@@ -117,6 +128,7 @@ Optional form fields:
 | `ai_provider` | `auto` | Use `auto`, `deepseek`, `openai`, or `local` |
 | `ai_model` | Provider default | Optional model override |
 | `ai_base_url` | Provider default | Optional OpenAI-compatible base URL |
+| `output_language` | `en` | Use `en` / `english` / `英文`, or `zh` / `chinese` / `中文` |
 
 Provider behavior:
 
@@ -142,11 +154,12 @@ Example response shape:
     "provider": "deepseek",
     "model": "deepseek-v4-flash",
     "base_url": "https://api.deepseek.com",
+    "language": "en",
     "used_fallback": false,
     "error": null,
-    "report": "# Retail Operations Report..."
+    "report": "## 1. Which Stores Perform Well..."
   },
-  "ai_report": "## 1. Executive Summary..."
+  "ai_report": "## 1. Which Stores Perform Well..."
 }
 ```
 

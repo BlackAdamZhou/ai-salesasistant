@@ -20,8 +20,11 @@ class AIOutput(BaseModel):
     provider: str
     model: str
     base_url: str | None = None
+    language: str
     used_fallback: bool
     error: str | None = None
+    provider_response_id: str | None = None
+    usage: dict[str, int | None] | None = None
     report: str
 
 

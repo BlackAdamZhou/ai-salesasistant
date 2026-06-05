@@ -5,7 +5,7 @@ from typing import Any
 
 from dotenv import load_dotenv
 
-from app.prompts import build_sales_report_prompt
+from app.prompts import build_sales_report_prompt, normalise_output_language
 
 
 DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
@@ -19,20 +19,27 @@ def generate_ai_report(
     provider: str = "auto",
     model: str | None = None,
     base_url: str | None = None,
+    output_language: str = "en",
 ) -> dict[str, Any]:
     load_dotenv()
+    language = normalise_output_language(output_language)
     config = _load_ai_config(provider=provider, model=model, base_url=base_url)
     if config["provider"] == "local":
-        report = generate_fallback_report(summary, "Local rule-based report selected.")
-        return _build_ai_output(config, report, used_fallback=True, error=None)
+        report = generate_fallback_report(
+            summary, "Local rule-based report selected.", output_language=language
+        )
+        return _build_ai_output(config, report, language, used_fallback=True, error=None)
 
     if not config["api_key"]:
         report = generate_fallback_report(
-            summary, "No AI API key is configured. Set DEEPSEEK_API_KEY or OPENAI_API_KEY."
+            summary,
+            "No AI API key is configured. Set DEEPSEEK_API_KEY or OPENAI_API_KEY.",
+            output_language=language,
         )
         return _build_ai_output(
             config,
             report,
+            language,
             used_fallback=True,
             error="No AI API key is configured.",
         )
@@ -41,34 +48,68 @@ def generate_ai_report(
         from openai import OpenAI
 
         client_kwargs = {"api_key": config["api_key"]}
+        timeout = os.getenv("AI_TIMEOUT_SECONDS")
+        if timeout:
+            client_kwargs["timeout"] = float(timeout)
+        max_retries = os.getenv("AI_MAX_RETRIES")
+        if max_retries:
+            client_kwargs["max_retries"] = int(max_retries)
         if config["base_url"]:
             client_kwargs["base_url"] = config["base_url"]
 
         client = OpenAI(**client_kwargs)
-        response = client.chat.completions.create(
-            model=config["model"],
-            messages=[
+        completion_kwargs: dict[str, Any] = {
+            "model": config["model"],
+            "messages": [
                 {
                     "role": "system",
-                    "content": "You write concise retail operations reports.",
+                    "content": (
+                        "You write concise retail operations reports. "
+                        "Always follow the requested output language."
+                    ),
                 },
-                {"role": "user", "content": build_sales_report_prompt(summary)},
+                {
+                    "role": "user",
+                    "content": build_sales_report_prompt(
+                        summary, output_language=language
+                    ),
+                },
             ],
-            temperature=0.2,
-        )
+            "temperature": 0.2,
+        }
+        max_tokens = os.getenv("AI_MAX_TOKENS")
+        if max_tokens:
+            completion_kwargs["max_tokens"] = int(max_tokens)
+
+        response = client.chat.completions.create(**completion_kwargs)
         content = response.choices[0].message.content
         if not content:
-            report = generate_fallback_report(summary, "AI provider returned no text.")
+            report = generate_fallback_report(
+                summary, "AI provider returned no text.", output_language=language
+            )
             return _build_ai_output(
                 config,
                 report,
+                language,
                 used_fallback=True,
                 error="AI provider returned no text.",
             )
-        return _build_ai_output(config, content, used_fallback=False, error=None)
+        return _build_ai_output(
+            config,
+            content,
+            language,
+            used_fallback=False,
+            error=None,
+            provider_response_id=getattr(response, "id", None),
+            usage=_extract_usage(response),
+        )
     except Exception as exc:  # pragma: no cover - depends on external API
-        report = generate_fallback_report(summary, f"AI provider API call failed: {exc}")
-        return _build_ai_output(config, report, used_fallback=True, error=str(exc))
+        report = generate_fallback_report(
+            summary, f"AI provider API call failed: {exc}", output_language=language
+        )
+        return _build_ai_output(
+            config, report, language, used_fallback=True, error=str(exc)
+        )
 
 
 def _load_ai_config(
@@ -113,20 +154,42 @@ def _load_ai_config(
 def _build_ai_output(
     config: dict[str, str | None],
     report: str,
+    language: str,
     used_fallback: bool,
     error: str | None,
+    provider_response_id: str | None = None,
+    usage: dict[str, int | None] | None = None,
 ) -> dict[str, Any]:
     return {
         "provider": config["provider"],
         "model": config["model"],
         "base_url": config["base_url"],
+        "language": language,
         "used_fallback": used_fallback,
         "error": error,
+        "provider_response_id": provider_response_id,
+        "usage": usage,
         "report": report,
     }
 
 
-def generate_fallback_report(summary: dict[str, Any], reason: str | None = None) -> str:
+def _extract_usage(response: Any) -> dict[str, int | None] | None:
+    usage = getattr(response, "usage", None)
+    if usage is None:
+        return None
+    return {
+        "prompt_tokens": getattr(usage, "prompt_tokens", None),
+        "completion_tokens": getattr(usage, "completion_tokens", None),
+        "total_tokens": getattr(usage, "total_tokens", None),
+    }
+
+
+def generate_fallback_report(
+    summary: dict[str, Any],
+    reason: str | None = None,
+    output_language: str = "en",
+) -> str:
+    language = normalise_output_language(output_language)
     stores = summary.get("store_performance", [])
     top_products = summary.get("top_products", [])
     fast_products = summary.get("fast_moving_products", [])
@@ -139,47 +202,89 @@ def generate_fallback_report(summary: dict[str, Any], reason: str | None = None)
     peak_date = date_metrics.get("peak_date", "N/A")
     trend = date_metrics.get("trend", "stable")
 
+    if language == "zh":
+        report = [
+            "## 1. 哪些店铺业绩好",
+            (
+                f"本次共分析 {summary.get('row_count', 0)} 条销售记录，覆盖 "
+                f"{summary.get('store_count', 0)} 家门店和 "
+                f"{summary.get('product_count', 0)} 个匿名商品。"
+                f"销售额表现最好的门店是 {best_store.get('store_name', 'N/A')}。"
+            ),
+            (
+                f"头部门店销售额为 {best_store.get('total_sales_amount', 0)}，"
+                f"区域为 {best_store.get('region', 'N/A')}，"
+                f"销售数量为 {best_store.get('total_quantity_sold', 0)}，"
+                f"最佳销售日期为 {best_store.get('best_sales_date', 'N/A')}。"
+            ),
+            "## 2. 哪些商品销售好",
+            (
+                f"按销售数量计算，表现最好的商品代码是 "
+                f"{best_product.get('product_code', 'N/A')}，销量为 "
+                f"{best_product.get('total_quantity_sold', 0)}，销售额为 "
+                f"{best_product.get('total_sales_amount', 0)}。"
+            ),
+            "## 3. 哪些商品周转快",
+            (
+                "如无库存字段，无法计算严格库存周转率。可用销量、销售次数、"
+                "覆盖门店、活跃天数和单店日均销量综合判断动销速度。"
+            ),
+            _product_codes_sentence(fast_products, "高动销商品代码"),
+            "## 4. 备货建议",
+            (
+                "A+ 核心常备商品应优先保证不断货，建议采用 3 天滚动补货并叠加"
+                "安全库存；B 类商品按门店历史销量分配；低动销商品减少主动铺货。"
+            ),
+            _recommendations_sentence(recommendations, output_language=language),
+            "## 5. 销售数据与日期的关联度",
+            (
+                f"销售峰值日期是 {peak_date}。基于前半段与后半段日均销售额对比，"
+                f"整体销售趋势为 {trend}。"
+            ),
+        ]
+        if reason:
+            report.append(f"\n_已使用本地规则报告：{reason}_")
+        return "\n\n".join(report)
+
     report = [
-        "## 1. Executive Summary",
+        "## 1. Which Stores Perform Well",
         (
             f"Analysed {summary.get('row_count', 0)} sales rows across "
             f"{summary.get('store_count', 0)} stores and "
             f"{summary.get('product_count', 0)} anonymised products. "
             f"The strongest store by revenue is {best_store.get('store_name', 'N/A')}."
         ),
-        "## 2. Store Performance Analysis",
         (
             f"Top store revenue: {best_store.get('total_sales_amount', 0)}; "
+            f"region: {best_store.get('region', 'N/A')}; "
             f"quantity sold: {best_store.get('total_quantity_sold', 0)}; "
             f"best sales date: {best_store.get('best_sales_date', 'N/A')}."
         ),
-        "## 3. Best-Selling Products",
+        "## 2. Which Products Sell Well",
         (
             f"Best-selling product code by quantity is "
             f"{best_product.get('product_code', 'N/A')} with "
-            f"{best_product.get('total_quantity_sold', 0)} units sold."
+            f"{best_product.get('total_quantity_sold', 0)} units sold and "
+            f"{best_product.get('total_sales_amount', 0)} in sales."
         ),
-        "## 4. Fast-Moving Products",
+        "## 3. Which Products Move Quickly",
+        (
+            "Strict inventory turnover cannot be calculated without stock data. "
+            "Use quantity sold, sales frequency, covered stores, active days, and "
+            "single-store daily quantity as movement-speed proxies."
+        ),
         _product_codes_sentence(fast_products, "Fast-moving product codes"),
-        "## 5. Slow-Moving Products",
-        _product_codes_sentence(slow_products, "Slow-moving product codes"),
-        "## 6. Stocking Recommendations",
+        "## 4. Stocking Recommendations",
+        (
+            "A+ core products should be protected from stockouts with 3-day rolling "
+            "replenishment plus safety stock. B class products should be allocated "
+            "by store-level history. Slow movers should receive less proactive stock."
+        ),
         _recommendations_sentence(recommendations),
-        "## 7. Relationship Between Sales and Date",
+        "## 5. Relationship Between Sales Data and Dates",
         (
             f"Peak sales date is {peak_date}. The overall date-sales trend is "
             f"{trend}, based on first-half versus second-half average daily sales."
-        ),
-        "## 8. Business Risks",
-        (
-            "High-velocity products may face stockout risk if replenishment does "
-            "not match demand. Slow-moving products may increase holding cost."
-        ),
-        "## 9. Recommended Next Actions",
-        (
-            "Prioritise replenishment for high-velocity and high-revenue product "
-            "codes, review slow movers before the next purchasing cycle, and "
-            "compare peak sales dates with store staffing and promotion plans."
         ),
     ]
     if reason:
@@ -192,10 +297,19 @@ def _product_codes_sentence(products: list[dict[str, Any]], label: str) -> str:
     return f"{label}: {', '.join(codes) if codes else 'N/A'}."
 
 
-def _recommendations_sentence(recommendations: list[dict[str, Any]]) -> str:
+def _recommendations_sentence(
+    recommendations: list[dict[str, Any]],
+    output_language: str = "en",
+) -> str:
     if not recommendations:
+        if normalise_output_language(output_language) == "zh":
+            return "未生成补货建议。"
         return "No stocking recommendations were generated."
     priority = recommendations[:5]
+    if normalise_output_language(output_language) == "zh":
+        return "优先动作：" + "；".join(
+            f"{item['product_code']} - {item['recommendation']}" for item in priority
+        )
     return "Priority actions: " + "; ".join(
         f"{item['product_code']} - {item['recommendation']}" for item in priority
     )

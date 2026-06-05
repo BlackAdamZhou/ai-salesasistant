@@ -71,6 +71,7 @@ def _read_excel(content: bytes) -> pd.DataFrame:
 def clean_sales_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     working = df.copy()
     keep_columns = [
+        "region",
         "date",
         "store_name",
         "product_name",
@@ -80,8 +81,9 @@ def clean_sales_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     ]
     working = working[[column for column in keep_columns if column in working.columns]]
 
-    for column in ("store_name", "product_name"):
-        working[column] = working[column].astype(str).str.strip()
+    for column in ("region", "store_name", "product_name"):
+        if column in working.columns:
+            working[column] = working[column].astype(str).str.strip()
 
     marker_pattern = "|".join(SUMMARY_ROW_MARKERS)
     summary_mask = (

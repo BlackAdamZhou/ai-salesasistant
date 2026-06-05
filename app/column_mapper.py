@@ -6,6 +6,16 @@ import pandas as pd
 
 
 COLUMN_ALIASES: dict[str, list[str]] = {
+    "region": [
+        "region",
+        "area",
+        "district",
+        "区域",
+        "区域分组",
+        "大区",
+        "片区",
+        "门店区域",
+    ],
     "date": [
         "date",
         "sales_date",
@@ -154,4 +164,3 @@ def map_columns(df: pd.DataFrame) -> pd.DataFrame:
         )
 
     return df.rename(columns=result.mapped_columns)
-
