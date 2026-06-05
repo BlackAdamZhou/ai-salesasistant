@@ -1,0 +1,9 @@
+销售日期,门店名称,商品名称,销售数量,销售金额,库存
+2026-04-01,Store A,Coca Cola 1.25L,10,55,30
+2026-04-01,Store A,Jasmine Rice 5kg,2,80,8
+2026-04-02,Store B,Coca Cola 1.25L,12,66,18
+2026-04-02,Store B,Potato Chips,5,40,50
+2026-04-03,Store A,Coca Cola 1.25L,15,82.5,10
+2026-04-03,Store B,Jasmine Rice 5kg,1,40,5
+2026-04-04,Store A,Potato Chips,2,16,55
+2026-04-04,Store B,Coca Cola 1.25L,20,110,4
