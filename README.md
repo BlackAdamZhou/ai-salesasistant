@@ -1,6 +1,6 @@
 # AI Sales Operations Assistant
 
-[English](# English) | [中文](# 中文)
+[English](#English) | [中文](#中文)
 
 ## English
 
@@ -206,7 +206,7 @@ Latest local verification:
 
 ## 销售数据分析助手
 
-[English](# English) | [中文](# 中文)
+[English](#English) | [中文](#中文)
 
 ## 中文
 
