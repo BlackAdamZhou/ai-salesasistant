@@ -40,6 +40,7 @@ def prepare_sales_dataframe(df: pd.DataFrame) -> pd.DataFrame:
 def build_analysis_summary(df: pd.DataFrame) -> dict[str, Any]:
     working = prepare_sales_dataframe(df)
     store_performance = calculate_store_performance(working)
+    region_performance = calculate_region_performance(working)
     product_performance = calculate_product_performance(working)
     top_products = sorted(
         product_performance,
@@ -63,12 +64,14 @@ def build_analysis_summary(df: pd.DataFrame) -> dict[str, Any]:
         "row_count": int(len(working)),
         "product_count": int(working["product_code"].nunique()),
         "store_count": int(working["store_name"].nunique()),
+        "has_stock_column": "stock_remaining" in working.columns,
         "date_range": {
             "start_date": _format_date(working["date"].min()),
             "end_date": _format_date(working["date"].max()),
             "sales_days": int(working["date"].nunique()),
         },
         "store_performance": store_performance,
+        "region_performance": region_performance,
         "top_products": top_products,
         "fast_moving_products": fast_moving_products,
         "slow_moving_products": slow_moving_products,
@@ -112,6 +115,25 @@ def calculate_store_performance(df: pd.DataFrame) -> list[dict[str, Any]]:
     )
     result = result.sort_values("total_sales_amount", ascending=False)
     return _records(result)
+
+
+def calculate_region_performance(df: pd.DataFrame) -> list[dict[str, Any]]:
+    grouped = (
+        df.groupby("region")
+        .agg(
+            total_sales_amount=("sales_amount", "sum"),
+            total_quantity_sold=("quantity_sold", "sum"),
+            store_count=("store_name", "nunique"),
+            transaction_count=("sales_amount", "count"),
+            sales_days=("date", "nunique"),
+        )
+        .reset_index()
+    )
+    grouped["average_daily_sales"] = (
+        grouped["total_sales_amount"] / grouped["sales_days"].replace(0, pd.NA)
+    )
+    grouped = grouped.sort_values("total_sales_amount", ascending=False)
+    return _records(grouped)
 
 
 def calculate_product_performance(df: pd.DataFrame) -> list[dict[str, Any]]:

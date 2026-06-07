@@ -28,8 +28,10 @@ def test_ai_safe_summary_is_compact():
         "row_count": 100,
         "product_count": 20,
         "store_count": 30,
+        "has_stock_column": False,
         "date_range": {"sales_days": 19},
         "store_performance": [{"store_name": str(index)} for index in range(30)],
+        "region_performance": [{"region": str(index)} for index in range(30)],
         "top_products": [
             {"product_code": f"Product_{index:03d}", "total_sales_amount": index}
             for index in range(30)
@@ -40,6 +42,11 @@ def test_ai_safe_summary_is_compact():
             {"product_code": str(index), "recommendation": "Maintain", "reason": "x"}
             for index in range(30)
         ],
+        "stocking_tiers": {
+            "a_plus_core_products": [],
+            "b_class_products": [],
+            "low_moving_products": [],
+        },
         "date_sales_relationship": {
             "peak_date": "2026-04-01",
             "daily_sales": [{"date": str(index)} for index in range(30)],
@@ -51,6 +58,8 @@ def test_ai_safe_summary_is_compact():
     ai_summary = _build_ai_safe_summary(summary)
 
     assert len(ai_summary["store_performance_top_10_by_sales_amount"]) == 10
+    assert len(ai_summary["region_performance_top_10_by_sales_amount"]) == 10
     assert len(ai_summary["products_top_10_by_sales_amount"]) == 10
+    assert ai_summary["has_stock_column"] is False
     assert len(ai_summary["stocking_recommendations_sample"]) == 20
     assert "daily_sales" not in ai_summary["date_sales_relationship"]

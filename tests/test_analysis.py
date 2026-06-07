@@ -4,6 +4,7 @@ from app.analysis import (
     build_analysis_summary,
     calculate_date_sales_relationship,
     calculate_product_performance,
+    calculate_region_performance,
     calculate_store_performance,
     classify_stocking_tiers,
     generate_stocking_recommendations,
@@ -45,6 +46,14 @@ def test_calculate_store_performance_ranks_by_sales_amount():
     assert result[0]["region"] == "Region 2"
     assert result[0]["total_sales_amount"] == 200.0
     assert result[0]["best_sales_date"] == "2026-04-03"
+
+
+def test_calculate_region_performance_ranks_by_sales_amount():
+    result = calculate_region_performance(_df())
+
+    assert result[0]["region"] == "Region 2"
+    assert result[0]["total_sales_amount"] == 200.0
+    assert result[0]["store_count"] == 1
 
 
 def test_calculate_product_performance_includes_velocity():
@@ -96,8 +105,10 @@ def test_build_analysis_summary_has_required_sections():
     summary = build_analysis_summary(_df())
 
     assert summary["row_count"] == 5
+    assert summary["has_stock_column"] is True
     assert summary["date_range"]["sales_days"] == 4
     assert summary["store_performance"]
+    assert summary["region_performance"]
     assert summary["top_products"]
     assert summary["stocking_tiers"]
     assert summary["stocking_recommendations"]

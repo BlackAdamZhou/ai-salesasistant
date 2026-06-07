@@ -108,6 +108,13 @@ dates.
 
 ### Docker Run
 
+`docker-compose.yml` reads `.env`. Create it from the example before starting
+Docker Compose:
+
+```bash
+copy .env.example .env
+```
+
 ```bash
 docker compose up --build
 ```
@@ -156,7 +163,10 @@ Example response shape:
   "anonymisation_status": "completed",
   "row_count": 1500,
   "product_count": 45,
+  "store_count": 12,
+  "has_stock_column": true,
   "store_performance": [],
+  "region_performance": [],
   "top_products": [],
   "fast_moving_products": [],
   "slow_moving_products": [],
@@ -182,9 +192,13 @@ Example response shape:
 
 ### `POST /export-analysis`
 
-Upload a `.xlsx` or `.csv` file using form field `file`. The endpoint
-returns an Excel workbook with sheets: `Summary_结论`, `门店表现`, `商品销售额`,
-`动销速度`, `备货建议`, `低动销商品`, `日期分析`, and `区域表现`.
+Upload a `.xlsx` or `.csv` file using form field `file`. Optional form fields
+match `/analyze-sales`, except `ai_provider` defaults to `local`. The endpoint
+returns a downloadable `.xlsx` workbook with content type
+`application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`.
+
+Exported sheets: `Summary_结论`, `门店表现`, `商品销售额`, `动销速度`, `备货建议`,
+`低动销商品`, `日期分析`, and `区域表现`.
 
 #### `GET /product-mapping`
 
@@ -199,7 +213,7 @@ py -m pytest -q
 Latest local verification:
 
 ```text
-21 passed in 3.31s
+26 passed in 1.11s
 ```
 
 
@@ -303,6 +317,12 @@ OPENAI_MODEL=gpt-4o-mini
 
 ### Docker 运行
 
+`docker-compose.yml` 会读取 `.env`。启动 Docker Compose 前请先从示例文件创建：
+
+```bash
+copy .env.example .env
+```
+
 ```bash
 docker compose up --build
 ```
@@ -351,7 +371,10 @@ http://127.0.0.1:8000/docs
   "anonymisation_status": "completed",
   "row_count": 1500,
   "product_count": 45,
+  "store_count": 12,
+  "has_stock_column": true,
   "store_performance": [],
+  "region_performance": [],
   "top_products": [],
   "fast_moving_products": [],
   "slow_moving_products": [],
@@ -377,9 +400,13 @@ http://127.0.0.1:8000/docs
 
 ### `POST /export-analysis`
 
-使用表单字段 `file` 上传 `.xlsx` 或 `.csv` 文件。接口返回 Excel 工作簿，
-包含 `Summary_结论`、`门店表现`、`商品销售额`、`动销速度`、`备货建议`、
-`低动销商品`、`日期分析` 和 `区域表现` 等工作表。
+使用表单字段 `file` 上传 `.xlsx` 或 `.csv` 文件。可选表单字段与
+`/analyze-sales` 一致，但 `ai_provider` 默认值为 `local`。接口返回可下载的
+`.xlsx` 工作簿，Content-Type 为
+`application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`。
+
+导出的工作表包括：`Summary_结论`、`门店表现`、`商品销售额`、`动销速度`、
+`备货建议`、`低动销商品`、`日期分析` 和 `区域表现`。
 
 #### `GET /product-mapping`
 
@@ -394,5 +421,5 @@ py -m pytest -q
 最近一次本地验证结果：
 
 ```text
-21 passed in 3.31s
+26 passed in 1.11s
 ```

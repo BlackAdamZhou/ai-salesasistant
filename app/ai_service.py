@@ -190,12 +190,32 @@ def generate_fallback_report(
     output_language: str = "zh",
 ) -> str:
     language = normalise_output_language(output_language)
-    stores = summary.get("store_performance", [])
-    top_products = summary.get("top_products", [])
-    fast_products = summary.get("fast_moving_products", [])
-    slow_products = summary.get("slow_moving_products", [])
+    stores = (
+        summary.get("store_performance")
+        or summary.get("store_performance_top_10_by_sales_amount")
+        or []
+    )
+    top_products = (
+        summary.get("top_products")
+        or summary.get("products_top_10_by_sales_amount")
+        or []
+    )
+    fast_products = (
+        summary.get("fast_moving_products")
+        or summary.get("fast_moving_products_top_10")
+        or []
+    )
+    slow_products = (
+        summary.get("slow_moving_products")
+        or summary.get("slow_moving_products_bottom_10")
+        or []
+    )
     stocking_tiers = summary.get("stocking_tiers", {})
-    recommendations = summary.get("stocking_recommendations", [])
+    recommendations = (
+        summary.get("stocking_recommendations")
+        or summary.get("stocking_recommendations_sample")
+        or []
+    )
     date_metrics = summary.get("date_sales_relationship", {})
 
     best_store = stores[0] if stores else {}
