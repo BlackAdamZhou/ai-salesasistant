@@ -83,12 +83,20 @@ def clean_sales_dataframe(df: pd.DataFrame) -> pd.DataFrame:
 
     for column in ("region", "store_name", "product_name"):
         if column in working.columns:
-            working[column] = working[column].astype(str).str.strip()
+            working[column] = working[column].map(
+                lambda value: value.strip() if isinstance(value, str) else value
+            )
 
     marker_pattern = "|".join(SUMMARY_ROW_MARKERS)
     summary_mask = (
-        working["store_name"].str.lower().str.contains(marker_pattern, na=False)
-        | working["product_name"].str.lower().str.contains(marker_pattern, na=False)
+        working["store_name"]
+        .astype("string")
+        .str.lower()
+        .str.contains(marker_pattern, na=False)
+        | working["product_name"]
+        .astype("string")
+        .str.lower()
+        .str.contains(marker_pattern, na=False)
     )
     working = working.loc[~summary_mask].copy()
 

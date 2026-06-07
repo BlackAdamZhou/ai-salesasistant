@@ -32,11 +32,13 @@ class AnalyzeSalesResponse(BaseModel):
     anonymisation_status: str = Field(default="completed")
     row_count: int
     product_count: int
+    has_stock_column: bool
     store_performance: list[dict[str, Any]]
     top_products: list[dict[str, Any]]
     fast_moving_products: list[dict[str, Any]]
     slow_moving_products: list[dict[str, Any]]
     stocking_recommendations: list[StockingRecommendation]
+    stocking_classification: dict[str, list[dict[str, Any]]]
     date_sales_relationship: dict[str, Any]
     ai_output: AIOutput
     ai_report: str

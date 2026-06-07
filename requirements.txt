@@ -6,4 +6,5 @@ openai
 python-dotenv
 pydantic
 openpyxl
+xlrd
 pytest

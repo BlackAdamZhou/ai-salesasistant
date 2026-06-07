@@ -13,8 +13,11 @@ portfolio demo and is usable from FastAPI Swagger UI at `/docs`.
 - Anonymise product names before AI processing as `Product_001`, `Product_002`.
 - Calculate store performance, top products, fast/slow movers, stocking actions,
   and date-sales relationships.
+- Classify stocking into A+ core products, B class products, and low-moving
+  products.
 - Generate an AI report with user-selectable providers: `auto`, `deepseek`,
   `openai`, or `local`.
+- Export the anonymised analysis workbook from `/export-analysis`.
 - Expose a debug-only product mapping endpoint for local testing.
 
 ## Tech Stack
@@ -38,6 +41,9 @@ Optional field:
 | Internal field | Meaning |
 | --- | --- |
 | `stock_remaining` | Remaining stock |
+
+When `stock_remaining` is absent, the report states that strict inventory
+turnover cannot be calculated and uses sales velocity proxies instead.
 
 The parser supports Chinese headers such as `营业日`, `门店名称`, `商品名称`,
 `商品销售数量(销售)`, and `商品销售金额(销售)`.
@@ -128,7 +134,7 @@ Optional form fields:
 | `ai_provider` | `auto` | Use `auto`, `deepseek`, `openai`, or `local` |
 | `ai_model` | Provider default | Optional model override |
 | `ai_base_url` | Provider default | Optional OpenAI-compatible base URL |
-| `output_language` | `en` | Use `en` / `english` / `英文`, or `zh` / `chinese` / `中文` |
+| `output_language` | `zh` | Use `zh` / `chinese` / `中文`, or `en` / `english` / `英文` |
 
 Provider behavior:
 
@@ -144,24 +150,36 @@ Example response shape:
   "anonymisation_status": "completed",
   "row_count": 1500,
   "product_count": 45,
+  "has_stock_column": true,
   "store_performance": [],
   "top_products": [],
   "fast_moving_products": [],
   "slow_moving_products": [],
   "stocking_recommendations": [],
+  "stocking_classification": {
+    "a_plus_core_products": [],
+    "b_class_products": [],
+    "low_moving_products": []
+  },
   "date_sales_relationship": {},
   "ai_output": {
     "provider": "deepseek",
     "model": "deepseek-v4-flash",
     "base_url": "https://api.deepseek.com",
-    "language": "en",
+    "language": "zh",
     "used_fallback": false,
     "error": null,
-    "report": "## 1. Which Stores Perform Well..."
+    "report": "## 1. 哪些店铺业绩好..."
   },
-  "ai_report": "## 1. Which Stores Perform Well..."
+  "ai_report": "## 1. 哪些店铺业绩好..."
 }
 ```
+
+### `POST /export-analysis`
+
+Upload a `.xlsx`, `.xls`, or `.csv` file using form field `file`. The endpoint
+returns an Excel workbook with sheets: `Summary_结论`, `门店表现`, `商品销售额`,
+`动销速度`, `备货建议`, `低动销商品`, `日期分析`, and `区域表现`.
 
 ### `GET /product-mapping`
 

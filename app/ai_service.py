@@ -190,12 +190,24 @@ def generate_fallback_report(
     output_language: str = "en",
 ) -> str:
     language = normalise_output_language(output_language)
-    stores = summary.get("store_performance", [])
-    top_products = summary.get("top_products", [])
-    fast_products = summary.get("fast_moving_products", [])
-    slow_products = summary.get("slow_moving_products", [])
+    stores = summary.get(
+        "store_performance", summary.get("store_performance_top_10_by_sales_amount", [])
+    )
+    top_products = summary.get(
+        "top_products", summary.get("products_top_10_by_sales_amount", [])
+    )
+    fast_products = summary.get(
+        "fast_moving_products", summary.get("fast_moving_products_top_10", [])
+    )
+    slow_products = summary.get(
+        "slow_moving_products", summary.get("slow_moving_products_bottom_10", [])
+    )
     recommendations = summary.get("stocking_recommendations", [])
+    if not recommendations:
+        recommendations = summary.get("stocking_recommendations_sample", [])
+    stocking_classification = summary.get("stocking_classification", {})
     date_metrics = summary.get("date_sales_relationship", {})
+    has_stock_column = bool(summary.get("has_stock_column"))
 
     best_store = stores[0] if stores else {}
     best_product = top_products[0] if top_products else {}
@@ -217,29 +229,104 @@ def generate_fallback_report(
                 f"销售数量为 {best_store.get('total_quantity_sold', 0)}，"
                 f"最佳销售日期为 {best_store.get('best_sales_date', 'N/A')}。"
             ),
+            _markdown_table(
+                stores[:10],
+                [
+                    ("排名", "__rank"),
+                    ("门店", "store_name"),
+                    ("区域", "region"),
+                    ("销售额", "total_sales_amount"),
+                    ("销量", "total_quantity_sold"),
+                    ("日均销售额", "average_daily_sales"),
+                ],
+            ),
             "## 2. 哪些商品销售好",
             (
-                f"按销售数量计算，表现最好的商品代码是 "
-                f"{best_product.get('product_code', 'N/A')}，销量为 "
-                f"{best_product.get('total_quantity_sold', 0)}，销售额为 "
-                f"{best_product.get('total_sales_amount', 0)}。"
+                f"按销售额计算，表现最好的商品代码是 "
+                f"{best_product.get('product_code', 'N/A')}，销售额为 "
+                f"{best_product.get('total_sales_amount', 0)}，销量为 "
+                f"{best_product.get('total_quantity_sold', 0)}。"
+            ),
+            _markdown_table(
+                top_products[:10],
+                [
+                    ("排名", "__rank"),
+                    ("商品代码", "product_code"),
+                    ("销售额", "total_sales_amount"),
+                    ("销量", "total_quantity_sold"),
+                    ("覆盖门店", "covered_store_count"),
+                ],
             ),
             "## 3. 哪些商品周转快",
             (
-                "如无库存字段，无法计算严格库存周转率。可用销量、销售次数、"
+                "存在库存字段，可结合当前库存和动销速度评估补货优先级。"
+                if has_stock_column
+                else "没有库存字段，无法计算严格库存周转率。可用销量、销售次数、"
                 "覆盖门店、活跃天数和单店日均销量综合判断动销速度。"
             ),
-            _product_codes_sentence(fast_products, "高动销商品代码"),
+            _markdown_table(
+                fast_products[:10],
+                [
+                    ("排名", "__rank"),
+                    ("商品代码", "product_code"),
+                    ("销量", "total_quantity_sold"),
+                    ("销售额", "total_sales_amount"),
+                    ("销售次数", "sales_frequency"),
+                    ("活跃天数", "sales_days"),
+                    ("单店日均销量", "single_store_daily_quantity"),
+                ],
+            ),
             "## 4. 备货建议",
             (
                 "A+ 核心常备商品应优先保证不断货，建议采用 3 天滚动补货并叠加"
                 "安全库存；B 类商品按门店历史销量分配；低动销商品减少主动铺货。"
+            ),
+            "### A+ 核心常备商品",
+            _markdown_table(
+                stocking_classification.get("a_plus_core_products", [])[:10],
+                _stocking_columns(),
+            ),
+            "### B 类商品",
+            _markdown_table(
+                stocking_classification.get("b_class_products", [])[:10],
+                _stocking_columns(),
+            ),
+            "### 低动销商品",
+            _markdown_table(
+                stocking_classification.get("low_moving_products", [])[:10],
+                _stocking_columns(),
             ),
             _recommendations_sentence(recommendations, output_language=language),
             "## 5. 销售数据与日期的关联度",
             (
                 f"销售峰值日期是 {peak_date}。基于前半段与后半段日均销售额对比，"
                 f"整体销售趋势为 {trend}。"
+            ),
+            "### 日期相关系数",
+            _metrics_table(date_metrics.get("correlation_metrics", {})),
+            "### 销售额最高 3 天",
+            _markdown_table(
+                date_metrics.get("top_sales_dates", [])[:3],
+                [
+                    ("日期", "date"),
+                    ("销售额", "sales_amount"),
+                    ("销量", "quantity_sold"),
+                    ("销售次数", "transaction_count"),
+                    ("活跃门店数", "active_store_count"),
+                    ("活跃商品数", "active_product_count"),
+                ],
+            ),
+            "### 销售额最低 3 天",
+            _markdown_table(
+                date_metrics.get("lowest_sales_dates", [])[:3],
+                [
+                    ("日期", "date"),
+                    ("销售额", "sales_amount"),
+                    ("销量", "quantity_sold"),
+                    ("销售次数", "transaction_count"),
+                    ("活跃门店数", "active_store_count"),
+                    ("活跃商品数", "active_product_count"),
+                ],
             ),
         ]
         if reason:
@@ -262,14 +349,16 @@ def generate_fallback_report(
         ),
         "## 2. Which Products Sell Well",
         (
-            f"Best-selling product code by quantity is "
+            f"Best-selling product code by sales amount is "
             f"{best_product.get('product_code', 'N/A')} with "
-            f"{best_product.get('total_quantity_sold', 0)} units sold and "
             f"{best_product.get('total_sales_amount', 0)} in sales."
         ),
         "## 3. Which Products Move Quickly",
         (
-            "Strict inventory turnover cannot be calculated without stock data. "
+            "A stock column exists, so movement speed can be interpreted alongside "
+            "remaining stock."
+            if has_stock_column
+            else "Strict inventory turnover cannot be calculated without stock data. "
             "Use quantity sold, sales frequency, covered stores, active days, and "
             "single-store daily quantity as movement-speed proxies."
         ),
@@ -295,6 +384,64 @@ def generate_fallback_report(
 def _product_codes_sentence(products: list[dict[str, Any]], label: str) -> str:
     codes = [str(item.get("product_code")) for item in products[:5]]
     return f"{label}: {', '.join(codes) if codes else 'N/A'}."
+
+
+def _stocking_columns() -> list[tuple[str, str]]:
+    return [
+        ("排名", "__rank"),
+        ("商品代码", "product_code"),
+        ("销售额", "total_sales_amount"),
+        ("销量", "total_quantity_sold"),
+        ("动销速度", "sales_velocity"),
+        ("覆盖门店", "covered_store_count"),
+        ("建议", "stocking_action"),
+    ]
+
+
+def _metrics_table(metrics: dict[str, Any]) -> str:
+    labels = {
+        "sales_amount": "销售额",
+        "quantity_sold": "销量",
+        "transaction_count": "销售次数",
+        "active_store_count": "活跃门店数",
+        "active_product_count": "活跃商品数",
+    }
+    rows = [
+        {"metric": label, "correlation": metrics.get(key)}
+        for key, label in labels.items()
+    ]
+    return _markdown_table(rows, [("指标", "metric"), ("相关系数", "correlation")])
+
+
+def _markdown_table(
+    rows: list[dict[str, Any]], columns: list[tuple[str, str]]
+) -> str:
+    headers = [header for header, _ in columns]
+    separator = ["---"] * len(columns)
+    table = [
+        "| " + " | ".join(headers) + " |",
+        "| " + " | ".join(separator) + " |",
+    ]
+    if not rows:
+        table.append("| " + " | ".join(["N/A"] + [""] * (len(columns) - 1)) + " |")
+        return "\n".join(table)
+
+    for index, row in enumerate(rows, start=1):
+        values = []
+        for _, key in columns:
+            value = index if key == "__rank" else row.get(key, "")
+            values.append(_format_table_value(value))
+        table.append("| " + " | ".join(values) + " |")
+    return "\n".join(table)
+
+
+def _format_table_value(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, float):
+        return f"{value:.2f}".rstrip("0").rstrip(".")
+    text = str(value)
+    return text.replace("|", "\\|").replace("\n", " ")
 
 
 def _recommendations_sentence(

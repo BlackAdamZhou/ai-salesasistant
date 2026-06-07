@@ -118,7 +118,19 @@ class ColumnMappingResult:
 def normalise_header(value: object) -> str:
     if value is None or pd.isna(value):
         return ""
-    text = str(value).strip().lower()
+    text = (
+        str(value)
+        .replace("（", "(")
+        .replace("）", ")")
+        .replace("：", ":")
+        .replace("，", ",")
+        .replace("；", ";")
+        .replace("、", ",")
+        .replace("\r", " ")
+        .replace("\n", " ")
+        .strip()
+        .lower()
+    )
     return "".join(text.split())
 
 

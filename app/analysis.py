@@ -33,11 +33,12 @@ def prepare_sales_dataframe(df: pd.DataFrame) -> pd.DataFrame:
 
 def build_analysis_summary(df: pd.DataFrame) -> dict[str, Any]:
     working = prepare_sales_dataframe(df)
+    has_stock_column = "stock_remaining" in working.columns
     store_performance = calculate_store_performance(working)
     product_performance = calculate_product_performance(working)
     top_products = sorted(
         product_performance,
-        key=lambda item: item["total_quantity_sold"],
+        key=lambda item: item["total_sales_amount"],
         reverse=True,
     )[:10]
     fast_moving_products = sorted(
@@ -50,12 +51,14 @@ def build_analysis_summary(df: pd.DataFrame) -> dict[str, Any]:
         key=lambda item: item["sales_velocity"],
     )[:10]
     stocking_recommendations = generate_stocking_recommendations(product_performance)
+    stocking_classification = classify_stocking_products(product_performance)
     date_sales_relationship = calculate_date_sales_relationship(working)
 
     return {
         "row_count": int(len(working)),
         "product_count": int(working["product_code"].nunique()),
         "store_count": int(working["store_name"].nunique()),
+        "has_stock_column": has_stock_column,
         "date_range": {
             "start_date": _format_date(working["date"].min()),
             "end_date": _format_date(working["date"].max()),
@@ -66,6 +69,7 @@ def build_analysis_summary(df: pd.DataFrame) -> dict[str, Any]:
         "fast_moving_products": fast_moving_products,
         "slow_moving_products": slow_moving_products,
         "stocking_recommendations": stocking_recommendations,
+        "stocking_classification": stocking_classification,
         "date_sales_relationship": date_sales_relationship,
     }
 
@@ -182,6 +186,68 @@ def generate_stocking_recommendations(
         )
 
     return recommendations
+
+
+def classify_stocking_products(
+    product_performance: list[dict[str, Any]]
+) -> dict[str, list[dict[str, Any]]]:
+    if not product_performance:
+        return {
+            "a_plus_core_products": [],
+            "b_class_products": [],
+            "low_moving_products": [],
+        }
+
+    metrics = pd.DataFrame(product_performance)
+    velocity_q75 = metrics["sales_velocity"].quantile(0.75)
+    velocity_q25 = metrics["sales_velocity"].quantile(0.25)
+    revenue_q75 = metrics["total_sales_amount"].quantile(0.75)
+    revenue_q25 = metrics["total_sales_amount"].quantile(0.25)
+
+    classes: dict[str, list[dict[str, Any]]] = {
+        "a_plus_core_products": [],
+        "b_class_products": [],
+        "low_moving_products": [],
+    }
+    for item in product_performance:
+        classification_item = {
+            "product_code": item["product_code"],
+            "total_sales_amount": item.get("total_sales_amount"),
+            "total_quantity_sold": item.get("total_quantity_sold"),
+            "sales_velocity": item.get("sales_velocity"),
+            "covered_store_count": item.get("covered_store_count"),
+            "sales_days": item.get("sales_days"),
+            "single_store_daily_quantity": item.get("single_store_daily_quantity"),
+        }
+        revenue = item["total_sales_amount"]
+        velocity = item["sales_velocity"]
+
+        if revenue >= revenue_q75 and velocity >= velocity_q75:
+            classification_item["stocking_action"] = (
+                "3-day rolling replenishment plus safety stock"
+            )
+            classes["a_plus_core_products"].append(classification_item)
+        elif revenue <= revenue_q25 or velocity <= velocity_q25:
+            classification_item["stocking_action"] = (
+                "Reduce proactive replenishment and monitor sell-through"
+            )
+            classes["low_moving_products"].append(classification_item)
+        else:
+            classification_item["stocking_action"] = (
+                "Maintain store-level replenishment based on recent sales"
+            )
+            classes["b_class_products"].append(classification_item)
+
+    for key, products in classes.items():
+        classes[key] = sorted(
+            products,
+            key=lambda item: (
+                item.get("total_sales_amount") or 0,
+                item.get("sales_velocity") or 0,
+            ),
+            reverse=True,
+        )
+    return classes
 
 
 def calculate_date_sales_relationship(df: pd.DataFrame) -> dict[str, Any]:

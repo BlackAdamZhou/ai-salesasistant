@@ -2,6 +2,7 @@ import pandas as pd
 
 from app.analysis import (
     build_analysis_summary,
+    classify_stocking_products,
     calculate_date_sales_relationship,
     calculate_product_performance,
     calculate_store_performance,
@@ -83,8 +84,40 @@ def test_build_analysis_summary_has_required_sections():
     summary = build_analysis_summary(_df())
 
     assert summary["row_count"] == 5
+    assert summary["has_stock_column"] is True
     assert summary["date_range"]["sales_days"] == 4
     assert summary["store_performance"]
     assert summary["top_products"]
+    assert summary["top_products"][0]["product_code"] == "Product_001"
     assert summary["stocking_recommendations"]
+    assert set(summary["stocking_classification"]) == {
+        "a_plus_core_products",
+        "b_class_products",
+        "low_moving_products",
+    }
     assert summary["date_sales_relationship"]["daily_sales"]
+
+
+def test_top_products_rank_by_sales_amount_not_quantity():
+    df = _df()
+    df.loc[len(df)] = [
+        pd.Timestamp("2026-04-04"),
+        "Store C",
+        "Region 3",
+        "Product_004",
+        100,
+        10,
+        100,
+    ]
+
+    summary = build_analysis_summary(df)
+
+    assert summary["top_products"][0]["product_code"] == "Product_001"
+
+
+def test_classify_stocking_products_returns_structured_buckets():
+    performance = calculate_product_performance(_df())
+    classes = classify_stocking_products(performance)
+
+    assert classes["a_plus_core_products"]
+    assert classes["low_moving_products"]
