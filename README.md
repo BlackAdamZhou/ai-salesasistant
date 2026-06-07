@@ -1,6 +1,6 @@
 # AI Sales Operations Assistant
 
-[English](#english) | [中文](#中文)
+[English](#English) | [中文](#中文)
 
 ## English
 
@@ -220,7 +220,9 @@ Latest local verification:
 
 ## 销售数据分析助手
 
-[English](#english)
+[English](#English) | [中文](#中文)
+
+## 中文
 
 零售 POS 销售文件分析后端 MVP，可生成 AI 辅助的运营洞察。本项目作为可以通过 FastAPI Swagger UI 的 `/docs` 页面使用。
 
