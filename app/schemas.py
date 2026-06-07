@@ -36,6 +36,7 @@ class AnalyzeSalesResponse(BaseModel):
     top_products: list[dict[str, Any]]
     fast_moving_products: list[dict[str, Any]]
     slow_moving_products: list[dict[str, Any]]
+    stocking_tiers: dict[str, list[dict[str, Any]]]
     stocking_recommendations: list[StockingRecommendation]
     date_sales_relationship: dict[str, Any]
     ai_output: AIOutput

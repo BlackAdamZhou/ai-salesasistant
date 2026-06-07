@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from app.column_mapper import map_columns
+from app.column_mapper import map_columns, normalise_header
 
 
 def test_map_columns_handles_actual_pos_headers():
@@ -35,3 +35,8 @@ def test_map_columns_reports_missing_required_columns():
         map_columns(df)
 
     assert "Missing required columns" in str(exc.value)
+
+
+def test_normalise_header_handles_real_pos_punctuation():
+    assert normalise_header(" 商品销售金额（销售）\n") == "商品销售金额(销售)"
+    assert normalise_header("销售金额：小计") == "销售金额:小计"

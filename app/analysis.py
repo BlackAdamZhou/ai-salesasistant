@@ -24,7 +24,13 @@ def prepare_sales_dataframe(df: pd.DataFrame) -> pd.DataFrame:
         )
     if "region" not in working.columns:
         working["region"] = "N/A"
-    working["region"] = working["region"].fillna("N/A").astype(str).str.strip()
+    for column in ("region", "store_name", "product_name"):
+        if column in working.columns:
+            working[column] = working[column].astype("string").str.strip()
+            working[column] = working[column].replace(
+                {"": pd.NA, "nan": pd.NA, "None": pd.NA, "NaN": pd.NA}
+            )
+    working["region"] = working["region"].fillna("N/A")
     working = working.dropna(subset=required)
     if working.empty:
         raise ValueError("No valid rows available for analysis.")
@@ -37,7 +43,7 @@ def build_analysis_summary(df: pd.DataFrame) -> dict[str, Any]:
     product_performance = calculate_product_performance(working)
     top_products = sorted(
         product_performance,
-        key=lambda item: item["total_quantity_sold"],
+        key=lambda item: item["total_sales_amount"],
         reverse=True,
     )[:10]
     fast_moving_products = sorted(
@@ -49,6 +55,7 @@ def build_analysis_summary(df: pd.DataFrame) -> dict[str, Any]:
         product_performance,
         key=lambda item: item["sales_velocity"],
     )[:10]
+    stocking_tiers = classify_stocking_tiers(product_performance)
     stocking_recommendations = generate_stocking_recommendations(product_performance)
     date_sales_relationship = calculate_date_sales_relationship(working)
 
@@ -65,6 +72,7 @@ def build_analysis_summary(df: pd.DataFrame) -> dict[str, Any]:
         "top_products": top_products,
         "fast_moving_products": fast_moving_products,
         "slow_moving_products": slow_moving_products,
+        "stocking_tiers": stocking_tiers,
         "stocking_recommendations": stocking_recommendations,
         "date_sales_relationship": date_sales_relationship,
     }
@@ -182,6 +190,56 @@ def generate_stocking_recommendations(
         )
 
     return recommendations
+
+
+def classify_stocking_tiers(
+    product_performance: list[dict[str, Any]],
+) -> dict[str, list[dict[str, Any]]]:
+    if not product_performance:
+        return {
+            "a_plus_core_products": [],
+            "b_class_products": [],
+            "low_moving_products": [],
+        }
+
+    metrics = pd.DataFrame(product_performance)
+    revenue_q75 = metrics["total_sales_amount"].quantile(0.75)
+    revenue_q25 = metrics["total_sales_amount"].quantile(0.25)
+    velocity_q75 = metrics["sales_velocity"].quantile(0.75)
+    velocity_q25 = metrics["sales_velocity"].quantile(0.25)
+
+    tiers = {
+        "a_plus_core_products": [],
+        "b_class_products": [],
+        "low_moving_products": [],
+    }
+    for item in product_performance:
+        revenue = item["total_sales_amount"]
+        velocity = item["sales_velocity"]
+        tier_item = {
+            "product_code": str(item["product_code"]),
+            "total_sales_amount": item["total_sales_amount"],
+            "total_quantity_sold": item["total_quantity_sold"],
+            "sales_velocity": item["sales_velocity"],
+            "covered_store_count": item["covered_store_count"],
+        }
+        if revenue >= revenue_q75 and velocity >= velocity_q75:
+            tier_item["reason"] = "High revenue contribution and high sales velocity."
+            tiers["a_plus_core_products"].append(tier_item)
+        elif revenue <= revenue_q25 and velocity <= velocity_q25:
+            tier_item["reason"] = "Low revenue contribution and low sales velocity."
+            tiers["low_moving_products"].append(tier_item)
+        else:
+            tier_item["reason"] = "Mid-range revenue or movement speed."
+            tiers["b_class_products"].append(tier_item)
+
+    for tier_name in tiers:
+        tiers[tier_name] = sorted(
+            tiers[tier_name],
+            key=lambda item: item["total_sales_amount"],
+            reverse=True,
+        )[:10]
+    return tiers
 
 
 def calculate_date_sales_relationship(df: pd.DataFrame) -> dict[str, Any]:

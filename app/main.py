@@ -42,8 +42,8 @@ async def analyze_sales(
         description="Optional OpenAI-compatible base URL override.",
     ),
     output_language: str = Form(
-        default="en",
-        description="Report language: en / english / 英文, or zh / chinese / 中文.",
+        default="zh",
+        description="Report language: zh / chinese / 中文, or en / english / 英文.",
     ),
 ) -> AnalyzeSalesResponse:
     global _latest_product_mapping
@@ -75,6 +75,7 @@ async def analyze_sales(
             top_products=analysis_summary["top_products"],
             fast_moving_products=analysis_summary["fast_moving_products"],
             slow_moving_products=analysis_summary["slow_moving_products"],
+            stocking_tiers=analysis_summary["stocking_tiers"],
             stocking_recommendations=analysis_summary["stocking_recommendations"],
             date_sales_relationship=analysis_summary["date_sales_relationship"],
             ai_output=ai_output,
@@ -115,6 +116,7 @@ def _build_ai_safe_summary(summary: dict) -> dict:
         )[:10],
         "fast_moving_products_top_10": summary.get("fast_moving_products", [])[:10],
         "slow_moving_products_bottom_10": summary.get("slow_moving_products", [])[:10],
+        "stocking_tiers": summary.get("stocking_tiers", {}),
         "stocking_recommendations_sample": summary.get(
             "stocking_recommendations", []
         )[:20],

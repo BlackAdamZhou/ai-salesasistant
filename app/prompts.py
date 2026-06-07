@@ -35,7 +35,7 @@ def normalise_output_language(output_language: str) -> str:
 
 def build_sales_report_prompt(
     summary: dict[str, Any],
-    output_language: str = "en",
+    output_language: str = "zh",
 ) -> str:
     sales_summary = json.dumps(summary, ensure_ascii=False, indent=2)
     language = normalise_output_language(output_language)

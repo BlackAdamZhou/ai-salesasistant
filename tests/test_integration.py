@@ -17,7 +17,7 @@ def test_full_pipeline_with_sample_csv():
     assert mapping
     assert summary["store_performance"]
     assert summary["top_products"]
-    assert "Which Stores Perform Well" in report
+    assert "哪些店铺业绩好" in report
     assert "Coca Cola" not in report
     assert "Jasmine Rice" not in report
     assert "Potato Chips" not in report

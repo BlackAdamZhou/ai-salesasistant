@@ -119,6 +119,10 @@ def normalise_header(value: object) -> str:
     if value is None or pd.isna(value):
         return ""
     text = str(value).strip().lower()
+    text = text.replace("（", "(").replace("）", ")")
+    text = text.replace("：", ":")
+    text = text.replace("\n", "")
+    text = text.replace("\r", "")
     return "".join(text.split())
 
 

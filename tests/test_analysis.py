@@ -5,6 +5,7 @@ from app.analysis import (
     calculate_date_sales_relationship,
     calculate_product_performance,
     calculate_store_performance,
+    classify_stocking_tiers,
     generate_stocking_recommendations,
 )
 
@@ -68,6 +69,18 @@ def test_generate_stocking_recommendations_returns_actions():
     }
 
 
+def test_classify_stocking_tiers_returns_structured_groups():
+    performance = calculate_product_performance(_df())
+    tiers = classify_stocking_tiers(performance)
+
+    assert set(tiers) == {
+        "a_plus_core_products",
+        "b_class_products",
+        "low_moving_products",
+    }
+    assert tiers["a_plus_core_products"]
+
+
 def test_calculate_date_sales_relationship_identifies_peak_and_trend():
     result = calculate_date_sales_relationship(_df())
 
@@ -86,5 +99,23 @@ def test_build_analysis_summary_has_required_sections():
     assert summary["date_range"]["sales_days"] == 4
     assert summary["store_performance"]
     assert summary["top_products"]
+    assert summary["stocking_tiers"]
     assert summary["stocking_recommendations"]
     assert summary["date_sales_relationship"]["daily_sales"]
+
+
+def test_build_analysis_summary_ranks_top_products_by_sales_amount():
+    df = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2026-04-01", "2026-04-01"]),
+            "store_name": ["Store A", "Store A"],
+            "region": ["Region 1", "Region 1"],
+            "product_code": ["Product_high_quantity", "Product_high_revenue"],
+            "quantity_sold": [100, 1],
+            "sales_amount": [100, 1000],
+        }
+    )
+
+    summary = build_analysis_summary(df)
+
+    assert summary["top_products"][0]["product_code"] == "Product_high_revenue"

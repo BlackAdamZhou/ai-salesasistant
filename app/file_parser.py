@@ -13,13 +13,13 @@ from app.column_mapper import (
 )
 
 
-SUPPORTED_EXTENSIONS = {".csv", ".xlsx", ".xls"}
+SUPPORTED_EXTENSIONS = {".csv", ".xlsx"}
 
 
 def read_sales_file(filename: str, content: bytes) -> pd.DataFrame:
     extension = Path(filename).suffix.lower()
     if extension not in SUPPORTED_EXTENSIONS:
-        raise ValueError("Unsupported file type. Please upload .xlsx, .xls, or .csv.")
+        raise ValueError("Unsupported file type. Please upload .xlsx or .csv.")
 
     if extension == ".csv":
         df = _read_csv(content)
@@ -83,7 +83,10 @@ def clean_sales_dataframe(df: pd.DataFrame) -> pd.DataFrame:
 
     for column in ("region", "store_name", "product_name"):
         if column in working.columns:
-            working[column] = working[column].astype(str).str.strip()
+            working[column] = working[column].astype("string").str.strip()
+            working[column] = working[column].replace(
+                {"": pd.NA, "nan": pd.NA, "None": pd.NA, "NaN": pd.NA}
+            )
 
     marker_pattern = "|".join(SUMMARY_ROW_MARKERS)
     summary_mask = (
