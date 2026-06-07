@@ -4,11 +4,8 @@
 
 ## English
 
-[中文](#中文)
-
 Backend MVP for analysing retail POS sales files and generating AI-assisted
-operations insights. The project is built for a GitHub-ready internship
-portfolio demo and is usable from FastAPI Swagger UI at `/docs`.
+operations insights. The project is usable from FastAPI Swagger UI at `/docs`.
 
 ### Features
 
@@ -19,8 +16,11 @@ portfolio demo and is usable from FastAPI Swagger UI at `/docs`.
 - Anonymise product names before AI processing as `Product_001`, `Product_002`.
 - Calculate store performance, top products, fast/slow movers, stocking actions,
   and date-sales relationships.
+- Classify stocking into A+ core products, B class products, and low-moving
+  products.
 - Generate an AI report with user-selectable providers: `auto`, `deepseek`,
   `openai`, or `local`.
+- Export the anonymised analysis workbook from `/export-analysis`.
 - Expose a debug-only product mapping endpoint for local testing.
 
 ### Tech Stack
@@ -44,6 +44,9 @@ Optional field:
 | Internal field | Meaning |
 | --- | --- |
 | `stock_remaining` | Remaining stock |
+
+When `stock_remaining` is absent, the report states that strict inventory
+turnover cannot be calculated and uses sales velocity proxies instead.
 
 The parser supports Chinese headers such as `营业日`, `门店名称`, `商品名称`,
 `商品销售数量(销售)`, and `商品销售金额(销售)`.
@@ -134,7 +137,7 @@ Optional form fields:
 | `ai_provider` | `auto` | Use `auto`, `deepseek`, `openai`, or `local` |
 | `ai_model` | Provider default | Optional model override |
 | `ai_base_url` | Provider default | Optional OpenAI-compatible base URL |
-| `output_language` | `en` | Use `en` / `english` / `英文`, or `zh` / `chinese` / `中文` |
+| `output_language` | `zh` | Use `zh` / `chinese` / `中文`, or `en` / `english` / `英文` |
 
 Provider behavior:
 
@@ -150,24 +153,36 @@ Example response shape:
   "anonymisation_status": "completed",
   "row_count": 1500,
   "product_count": 45,
+  "has_stock_column": true,
   "store_performance": [],
   "top_products": [],
   "fast_moving_products": [],
   "slow_moving_products": [],
   "stocking_recommendations": [],
+  "stocking_classification": {
+    "a_plus_core_products": [],
+    "b_class_products": [],
+    "low_moving_products": []
+  },
   "date_sales_relationship": {},
   "ai_output": {
     "provider": "deepseek",
     "model": "deepseek-v4-flash",
     "base_url": "https://api.deepseek.com",
-    "language": "en",
+    "language": "zh",
     "used_fallback": false,
     "error": null,
-    "report": "## 1. Which Stores Perform Well..."
+    "report": "## 1. 哪些店铺业绩好..."
   },
-  "ai_report": "## 1. Which Stores Perform Well..."
+  "ai_report": "## 1. 哪些店铺业绩好..."
 }
 ```
+
+### `POST /export-analysis`
+
+Upload a `.xlsx`, `.xls`, or `.csv` file using form field `file`. The endpoint
+returns an Excel workbook with sheets: `Summary_结论`, `门店表现`, `商品销售额`,
+`动销速度`, `备货建议`, `低动销商品`, `日期分析`, and `区域表现`.
 
 #### `GET /product-mapping`
 
@@ -179,27 +194,13 @@ Returns the latest in-memory product mapping for local debugging only.
 pytest
 ```
 
-### Resume Description
 
-AI Sales Operations Assistant | Python, FastAPI, pandas, OpenAI API, Docker
 
-- Built a backend prototype that analyses retail POS data and generates
-  AI-assisted business insights.
-- Implemented product-name anonymisation before sending data to the AI model to
-  improve data privacy.
-- Used pandas to calculate store performance, top-selling products, sales
-  velocity, date-based sales trends, and stocking recommendations.
-- Integrated OpenAI API to generate structured business reports for retail
-  operations.
-- Developed REST API endpoints with FastAPI and containerised the application
-  using Docker.
-
-## 中文
+## 销售数据分析助手
 
 [English](#english)
 
-零售 POS 销售文件分析后端 MVP，可生成 AI 辅助的运营洞察。本项目适合作为
-GitHub 实习作品集演示，也可以通过 FastAPI Swagger UI 的 `/docs` 页面使用。
+零售 POS 销售文件分析后端 MVP，可生成 AI 辅助的运营洞察。本项目作为可以通过 FastAPI Swagger UI 的 `/docs` 页面使用。
 
 ### 功能特性
 
@@ -366,13 +367,3 @@ http://127.0.0.1:8000/docs
 ```bash
 pytest
 ```
-
-### 简历描述
-
-AI Sales Operations Assistant | Python、FastAPI、pandas、OpenAI API、Docker
-
-- 构建了一个后端原型，用于分析零售 POS 数据并生成 AI 辅助的业务洞察。
-- 在将数据发送给 AI 模型前实现商品名匿名化，以提升数据隐私保护。
-- 使用 pandas 计算门店表现、热销商品、销售速度、日期维度销售趋势和补货建议。
-- 集成 OpenAI API，为零售运营生成结构化业务报告。
-- 使用 FastAPI 开发 REST API 接口，并通过 Docker 对应用进行容器化。
